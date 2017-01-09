@@ -615,6 +615,11 @@ public:
     Future<ValueType> MaxFuture(
         const ValueType& initial_value = ValueType()) const;
 
+    /* TODO docs
+     * \param p Number of bits to use for index. Should be between 4 and 16.
+     */
+    template <size_t p> double HyperLogLog() const;
+
     /*!
      * WriteLinesOne is an Action, which writes std::strings to a single output
      * file.
