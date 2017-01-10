@@ -22,6 +22,9 @@
 
 using namespace thrill; // NOLINT
 
+double relativeError(double trueVal, double estimate) {
+    return estimate / trueVal - 1;
+}
 TEST(Operations, HyperLogLog) {
     std::function<void(Context &)> start_func = [](Context &ctx) {
         static constexpr bool debug = true;
@@ -29,10 +32,18 @@ TEST(Operations, HyperLogLog) {
 
         auto indices = Generate(ctx, n);
 
-        LOG << "hyperloglog with p=" << 4 << ": " << indices.HyperLogLog<4>();
-        LOG << "hyperloglog with p=" << 8 << ": " << indices.HyperLogLog<8>();
-        LOG << "hyperloglog with p=" << 12 << ": " << indices.HyperLogLog<12>();
-        LOG << "hyperloglog with p=" << 14 << ": " << indices.HyperLogLog<14>();
+        double estimate = indices.HyperLogLog<4>();
+        LOG << "hyperloglog with p=" << 4 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<8>();
+        LOG << "hyperloglog with p=" << 8 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<12>();
+        LOG << "hyperloglog with p=" << 12 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<14>();
+        LOG << "hyperloglog with p=" << 14 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
     };
 
     thrill::Run([&](thrill::Context &ctx) { start_func(ctx); });
