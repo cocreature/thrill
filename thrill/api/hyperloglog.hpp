@@ -110,8 +110,8 @@ template <> constexpr double alpha<6> = 0.709;
 using Registers = std::vector<uint64_t>;
 
 template <typename ValueType, size_t p>
-static Registers registersForValue(const ValueType &value) {
-    std::vector<uint64_t> entries(1 << p, 0);
+static Registers insertInRegisters(Registers &registers,
+                                   const ValueType &value) {
     // first p bits are the index
     uint32_t hashVal = static_cast<uint32_t>(hash<ValueType>(value));
     uint32_t index = hashVal >> (32 - p);
@@ -119,20 +119,26 @@ static Registers registersForValue(const ValueType &value) {
     // Check for off-by-one
     uint64_t leadingZeroes = val == 0 ? (32 - p) : __builtin_clz(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (32 - p));
-    entries[index] = leadingZeroes + 1;
-    return entries;
+    registers[index] = std::max(leadingZeroes + 1, registers[index]);
+    return registers;
+}
+
+template <typename ValueType, size_t p>
+static Registers registersForValue(const ValueType &value) {
+    std::vector<uint64_t> entries(1 << p, 0);
+    return insertInRegisters<ValueType, p>(entries, value);
 }
 
 template <size_t p>
-static Registers combineRegisters(Registers registers1, Registers registers2) {
+static Registers combineRegisters(Registers &registers1,
+                                  const Registers &registers2) {
     const size_t m = 1 << p;
     assert(m == registers1.size());
     assert(m == registers2.size());
-    std::vector<uint64_t> entries(m, 0);
     for (size_t i = 0; i < m; ++i) {
-        entries[i] = std::max(registers1[i], registers2[i]);
+        registers1[i] = std::max(registers1[i], registers2[i]);
     }
-    return entries;
+    return registers1;
 }
 
 template <size_t p> static Registers emptyRegisters() {
@@ -140,16 +146,62 @@ template <size_t p> static Registers emptyRegisters() {
     return entries;
 }
 
+/*!
+ * \ingroup api_layer
+ */
+template <size_t p, typename ValueType>
+class HyperLogLogNode final : public ActionResultNode<Registers> {
+    static constexpr bool debug = false;
+
+    using Super = ActionResultNode<Registers>;
+    using Super::context_;
+
+  public:
+    template <typename ParentDIA>
+    HyperLogLogNode(const ParentDIA &parent, const char *label)
+        : Super(parent.ctx(), label, {parent.id()}, {parent.node()}),
+          registers(emptyRegisters<p>()), first_(parent.ctx().my_rank() != 0) {
+        // Hook PreOp(s)
+        auto pre_op_fn = [this](const ValueType &input) { PreOp(input); };
+
+        auto lop_chain = parent.stack().push(pre_op_fn).fold();
+        parent.node()->AddChild(this, lop_chain);
+    }
+
+    void PreOp(const ValueType &input) {
+        if (THRILL_UNLIKELY(first_)) {
+            first_ = false;
+            registers = registersForValue<ValueType, p>(input);
+        } else {
+            registers = insertInRegisters<ValueType, p>(registers, input);
+        }
+    }
+
+    //! Executes the sum operation.
+    void Execute() final {
+        // process the reduce
+        registers = context_.net.AllReduce(registers, combineRegisters<p>);
+    }
+
+    //! Returns result of global sum.
+    const Registers &result() const final { return registers; }
+
+  private:
+    Registers registers;
+    //! indicate that sum_ is the default constructed first value. Worker 0's
+    //! value is already set to initial_value.
+    bool first_;
+};
+
 template <typename ValueType, typename Stack>
 template <size_t p>
 double DIA<ValueType, Stack>::HyperLogLog() const {
     assert(IsValid());
 
-    auto reducedRegisters =
-        this->Map<std::function<Registers(ValueType)>>(
-                registersForValue<ValueType, p>)
-            .AllReduce<std::function<Registers(Registers, Registers)>>(
-                combineRegisters<p>, emptyRegisters<p>());
+    auto node =
+        common::MakeCounting<HyperLogLogNode<p, ValueType>>(*this, "AllReduce");
+    node->RunScope();
+    Registers reducedRegisters = node->result();
 
     const size_t m = 1 << p;
     double E = 0;
