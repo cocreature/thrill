@@ -27,7 +27,8 @@ template <> uint32_t hash<size_t>(const size_t &val) {
     return val * 2654435761;
 }
 
-template <const unsigned int p> const uint32_t indexMask = ~(1 << (32 - p) - 1);
+template <const uint32_t p>
+const uint32_t indexMask = ~(static_cast<uint32_t>((1 << (32 - p)) - 1));
 
 template <size_t p> constexpr double alpha = 0.7213 / (1 + 1.079 / (1 << p));
 template <> constexpr double alpha<4> = 0.673;
