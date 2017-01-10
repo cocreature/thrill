@@ -55,9 +55,9 @@ static Registers registersForValue(const ValueType &value) {
 
 template <size_t p>
 static Registers combineRegisters(Registers registers1, Registers registers2) {
-    assert(registers1.size() == registers2.size());
-    size_t m = 1 << p;
+    const size_t m = 1 << p;
     assert(m == registers1.size());
+    assert(m == registers2.size());
     std::vector<uint64_t> entries(m, 0);
     for (size_t i = 0; i < m; ++i) {
         entries[i] = std::max(registers1[i], registers2[i]);
@@ -81,7 +81,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
             .AllReduce<std::function<Registers(Registers, Registers)>>(
                 combineRegisters<p>, emptyRegisters<p>());
 
-    size_t m = 1 << p;
+    const size_t m = 1 << p;
     double E = 0;
     unsigned V = 0;
     assert(reducedRegisters.size() == m);
