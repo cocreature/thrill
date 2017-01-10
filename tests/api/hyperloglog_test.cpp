@@ -35,8 +35,14 @@ TEST(Operations, HyperLogLog) {
         double estimate = indices.HyperLogLog<4>();
         LOG << "hyperloglog with p=" << 4 << ": " << estimate
             << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<6>();
+        LOG << "hyperloglog with p=" << 6 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
         estimate = indices.HyperLogLog<8>();
         LOG << "hyperloglog with p=" << 8 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<10>();
+        LOG << "hyperloglog with p=" << 10 << ": " << estimate
             << ", relative error: " << relativeError(n, estimate);
         estimate = indices.HyperLogLog<12>();
         LOG << "hyperloglog with p=" << 12 << ": " << estimate
