@@ -9,8 +9,8 @@
  * All rights reserved. Published under the BSD-2 license in the LICENSE file.
  ******************************************************************************/
 
-#include <thrill/api/hyperloglog.hpp>
 #include <thrill/api/generate.hpp>
+#include <thrill/api/hyperloglog.hpp>
 
 #include <gtest/gtest.h>
 
@@ -25,15 +25,14 @@ using namespace thrill; // NOLINT
 TEST(Operations, HyperLogLog) {
     std::function<void(Context &)> start_func = [](Context &ctx) {
         static constexpr bool debug = true;
-        size_t n = 1000000;
+        size_t n = 100000;
 
         auto indices = Generate(ctx, n);
 
         LOG << "hyperloglog with p=" << 4 << ": " << indices.HyperLogLog<4>();
         LOG << "hyperloglog with p=" << 8 << ": " << indices.HyperLogLog<8>();
         LOG << "hyperloglog with p=" << 12 << ": " << indices.HyperLogLog<12>();
-        // LOG << "hyperloglog with p=" << 16 << ": " <<
-        // indices.HyperLogLog<16>();
+        LOG << "hyperloglog with p=" << 14 << ": " << indices.HyperLogLog<14>();
     };
 
     thrill::Run([&](thrill::Context &ctx) { start_func(ctx); });
