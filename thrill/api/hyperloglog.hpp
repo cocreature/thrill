@@ -93,16 +93,20 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     E = alpha<p> * m * m / E;
 
     if (E <= 5.0 / 2 * m) {
+        std::cout << "small E\n";
         // linear count
         if (V != 0) {
             // linear count
+            std::cout << "linear count\n";
             return m * log(static_cast<double>(m) / V);
         } else {
             return E;
         }
     } else if (E <= 1.0 / 30 * std::pow(2.0, 32)) {
+        std::cout << "medium E\n";
         return E;
     } else {
+        std::cout << "large E\n";
         return -std::pow(2.0, 32) * log(1 - E / (std::pow(2.0, 32)));
     }
 }
