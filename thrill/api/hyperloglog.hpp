@@ -43,9 +43,9 @@ template <typename ValueType, size_t p>
 static Registers registersForValue(const ValueType &value) {
     std::vector<uint64_t> entries(1 << p, 0);
     // first p bits are the index
-    uint32_t truncatedHash = static_cast<uint32_t>(hash<ValueType>(value));
-    uint32_t index = (truncatedHash & indexMask<p>) >> (32 - p);
-    uint32_t val =  truncatedHash << p;
+    uint32_t hashVal = static_cast<uint32_t>(hash<ValueType>(value));
+    uint32_t index = hashVal >> (32 - p);
+    uint32_t val = hashVal << p;
     // Check for off-by-one
     uint64_t leadingZeroes = val == 0 ? (32 - p) : __builtin_clz(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (32 - p));
