@@ -94,7 +94,7 @@ template <typename Value> uint32_t hash(const Value &val) {
     const unsigned char key[16] = {0, 0, 0, 0, 0, 0, 0, 0x4,
                                    0, 0, 0, 0, 0, 0, 0, 0x7};
     return static_cast<uint32_t>(siphash(
-        key, reinterpret_cast<const unsigned char *>(&val), sizeof(size_t)));
+        key, reinterpret_cast<const unsigned char *>(&val), sizeof(Value)));
 }
 
 template <const uint32_t p>
