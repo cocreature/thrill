@@ -181,7 +181,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     auto node =
         common::MakeCounting<HyperLogLogNode<p, ValueType>>(*this, "AllReduce");
     node->RunScope();
-    Registers<1 << p> reducedRegisters = node->result();
+    const auto &reducedRegisters = node->result();
 
     const size_t m = 1 << p;
     double E = 0;
