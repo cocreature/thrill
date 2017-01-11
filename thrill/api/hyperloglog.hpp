@@ -107,11 +107,11 @@ template <> constexpr double alpha<6> = 0.709;
 
 // TODO We should wrap this in a separate type but I’m too lazy to figure
 // out the serialization right now
-using Registers = std::vector<uint64_t>;
+template <size_t p> using Registers = std::array<uint64_t, p>;
 
 template <typename ValueType, size_t p>
-static Registers insertInRegisters(Registers &registers,
-                                   const ValueType &value) {
+static void insertInRegisters(Registers<1 << p> &registers,
+                              const ValueType &value) {
     // first p bits are the index
     uint32_t hashVal = static_cast<uint32_t>(hash<ValueType>(value));
     uint32_t index = hashVal >> (32 - p);
@@ -120,18 +120,11 @@ static Registers insertInRegisters(Registers &registers,
     uint64_t leadingZeroes = val == 0 ? (32 - p) : __builtin_clz(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (32 - p));
     registers[index] = std::max(leadingZeroes + 1, registers[index]);
-    return registers;
-}
-
-template <typename ValueType, size_t p>
-static Registers registersForValue(const ValueType &value) {
-    std::vector<uint64_t> entries(1 << p, 0);
-    return insertInRegisters<ValueType, p>(entries, value);
 }
 
 template <size_t p>
-static Registers combineRegisters(Registers &registers1,
-                                  const Registers &registers2) {
+static Registers<1 << p> combineRegisters(Registers<1 << p> &registers1,
+                                          const Registers<1 << p> &registers2) {
     const size_t m = 1 << p;
     assert(m == registers1.size());
     assert(m == registers2.size());
@@ -141,26 +134,21 @@ static Registers combineRegisters(Registers &registers1,
     return registers1;
 }
 
-template <size_t p> static Registers emptyRegisters() {
-    std::vector<uint64_t> entries(1 << p, 0);
-    return entries;
-}
-
 /*!
  * \ingroup api_layer
  */
 template <size_t p, typename ValueType>
-class HyperLogLogNode final : public ActionResultNode<Registers> {
+class HyperLogLogNode final : public ActionResultNode<Registers<1 << p>> {
     static constexpr bool debug = false;
 
-    using Super = ActionResultNode<Registers>;
+    using Super = ActionResultNode<Registers<1 << p>>;
     using Super::context_;
 
   public:
     template <typename ParentDIA>
     HyperLogLogNode(const ParentDIA &parent, const char *label)
         : Super(parent.ctx(), label, {parent.id()}, {parent.node()}),
-          registers(emptyRegisters<p>()), first_(parent.ctx().my_rank() != 0) {
+          registers{} {
         // Hook PreOp(s)
         auto pre_op_fn = [this](const ValueType &input) { PreOp(input); };
 
@@ -169,12 +157,7 @@ class HyperLogLogNode final : public ActionResultNode<Registers> {
     }
 
     void PreOp(const ValueType &input) {
-        if (THRILL_UNLIKELY(first_)) {
-            first_ = false;
-            registers = registersForValue<ValueType, p>(input);
-        } else {
-            registers = insertInRegisters<ValueType, p>(registers, input);
-        }
+        insertInRegisters<ValueType, p>(registers, input);
     }
 
     //! Executes the sum operation.
@@ -184,13 +167,10 @@ class HyperLogLogNode final : public ActionResultNode<Registers> {
     }
 
     //! Returns result of global sum.
-    const Registers &result() const final { return registers; }
+    const Registers<1 << p> &result() const final { return registers; }
 
   private:
-    Registers registers;
-    //! indicate that sum_ is the default constructed first value. Worker 0's
-    //! value is already set to initial_value.
-    bool first_;
+    Registers<1 << p> registers;
 };
 
 template <typename ValueType, typename Stack>
@@ -201,7 +181,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     auto node =
         common::MakeCounting<HyperLogLogNode<p, ValueType>>(*this, "AllReduce");
     node->RunScope();
-    Registers reducedRegisters = node->result();
+    Registers<1 << p> reducedRegisters = node->result();
 
     const size_t m = 1 << p;
     double E = 0;
