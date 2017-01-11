@@ -20,6 +20,17 @@
 namespace thrill {
 namespace api {
 
+    int leadingZeros(uint64_t val) {
+         uint32_t lower = val; // lower
+         uint32_t upper = val >> 32;
+
+        if (upper == 0) {
+          return 32 + __builtin_clz(lower);
+        } else {
+          return __builtin_clz(upper);
+        }
+    }
+
 // This siphash imlementation is taken from
 // https://github.com/floodyberry/siphash
 #define ROTL64(a, b) (((a) << (b)) | ((a) >> (64 - b)))
@@ -90,15 +101,16 @@ uint64_t siphash(const unsigned char key[16], const unsigned char *m,
         v2 ^ v3;
 }
 
-template <typename Value> uint32_t hash(const Value &val) {
+template <typename Value> uint64_t hash(const Value &val) {
     const unsigned char key[16] = {0, 0, 0, 0, 0, 0, 0, 0x4,
                                    0, 0, 0, 0, 0, 0, 0, 0x7};
-    return static_cast<uint32_t>(siphash(
-        key, reinterpret_cast<const unsigned char *>(&val), sizeof(Value)));
+    return siphash(
+        key, reinterpret_cast<const unsigned char *>(&val), sizeof(Value));
 }
 
-template <const uint32_t p>
-const uint32_t indexMask = ~(static_cast<uint32_t>((1 << (32 - p)) - 1));
+// TODO: check that it was not used anywhere
+// template <const uint32_t p>
+// const uint32_t indexMask = ~(static_cast<uint32_t>((1 << (32 - p)) - 1));
 
 template <size_t p> constexpr double alpha = 0.7213 / (1 + 1.079 / (1 << p));
 template <> constexpr double alpha<4> = 0.673;
@@ -113,12 +125,13 @@ template <typename ValueType, size_t p>
 static void insertInRegisters(Registers<1 << p> &registers,
                               const ValueType &value) {
     // first p bits are the index
-    uint32_t hashVal = static_cast<uint32_t>(hash<ValueType>(value));
-    uint32_t index = hashVal >> (32 - p);
-    uint32_t val = hashVal << p;
+    uint64_t hashVal = static_cast<uint64_t>(hash<ValueType>(value));
+    uint64_t index = hashVal >> (64 - p);
+    uint64_t val = hashVal << p;
     // Check for off-by-one
-    uint64_t leadingZeroes = val == 0 ? (32 - p) : __builtin_clz(val);
-    assert(leadingZeroes >= 0 && leadingZeroes <= (32 - p));
+    // __builtin_clz does not return the correct value for uint64_t
+    uint64_t leadingZeroes = val == 0 ? (64 - p) : leadingZeros(val);
+    assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
     registers[index] = std::max(leadingZeroes + 1, registers[index]);
 }
 
@@ -205,12 +218,9 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
         } else {
             return E;
         }
-    } else if (E <= 1.0 / 30 * std::pow(2.0, 32)) {
-        std::cout << "medium E\n";
-        return E;
     } else {
-        std::cout << "large E\n";
-        return -std::pow(2.0, 32) * log(1 - E / (std::pow(2.0, 32)));
+        std::cout << "medium/large E\n";
+        return E;
     }
 }
 
