@@ -21,13 +21,13 @@ namespace thrill {
 namespace api {
 
     int leadingZeros(uint64_t val) {
-         uint32_t lower = val; // lower
          uint32_t upper = val >> 32;
 
         if (upper == 0) {
-          return 32 + __builtin_clz(lower);
+            uint32_t lower = val; // lower
+            return 32 + __builtin_clz(lower);
         } else {
-          return __builtin_clz(upper);
+            return __builtin_clz(upper);
         }
     }
 
@@ -128,7 +128,7 @@ static void insertInRegisters(Registers<1 << p> &registers,
     uint64_t hashVal = static_cast<uint64_t>(hash<ValueType>(value));
     uint64_t index = hashVal >> (64 - p);
     uint64_t val = hashVal << p;
-    // Check for off-by-one
+        // Check for off-by-one
     // __builtin_clz does not return the correct value for uint64_t
     uint64_t leadingZeroes = val == 0 ? (64 - p) : leadingZeros(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
