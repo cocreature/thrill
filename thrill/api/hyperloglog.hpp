@@ -20,10 +20,8 @@
 namespace thrill {
 namespace api {
 
-// for an array of uint64_t, the value to break this is exactly 54816/2+1,
-// suggesting that this is size related
-static const size_t NUMBER_OF_REGISTERS = 54817;
-using Registers = std::array<uint32_t, NUMBER_OF_REGISTERS>;
+static const size_t NUMBER_OF_REGISTERS = 54816;
+using Registers = std::vector<uint32_t>;
 
 template <typename ValueType>
 class HyperLogLogNode final : public ActionResultNode<Registers> {
@@ -35,7 +33,7 @@ class HyperLogLogNode final : public ActionResultNode<Registers> {
     template <typename ParentDIA>
     HyperLogLogNode(const ParentDIA &parent, const char *label)
         : Super(parent.ctx(), label, {parent.id()}, {parent.node()}),
-          registers{} {
+          registers(NUMBER_OF_REGISTERS, 0.0) {
         auto pre_op_fn = [this](const ValueType &input) { PreOp(input); };
 
         auto lop_chain = parent.stack().push(pre_op_fn).fold();
