@@ -12,12 +12,42 @@
 #ifndef THRILL_API_HYPERLOGLOG_HEADER
 #define THRILL_API_HYPERLOGLOG_HEADER
 
+#include <iostream>
+#include <limits.h>
 #include <thrill/api/all_reduce.hpp>
 #include <thrill/common/functional.hpp>
-#include <limits.h>
-#include <iostream>
 
 namespace thrill {
+template <size_t p> struct Registers {
+    Registers() : entries{} {}
+    std::array<uint64_t, 1 << p> entries;
+    uint64_t &operator[](size_t idx) { return entries[idx]; }
+    const uint64_t &operator[](size_t idx) const { return entries[idx]; }
+    size_t size() const { return entries.size(); }
+};
+
+namespace data {
+template <typename Archive, size_t p>
+struct Serialization<Archive, Registers<p>,
+                     typename std::enable_if<p <= 16>::type> {
+    static void Serialize(const Registers<p> &x, Archive &ar) {
+        for (auto it = x.entries.begin(); it != x.entries.end(); ++it)
+            Serialization<Archive, uint64_t>::Serialize(*it, ar);
+    }
+    static Registers<p> Deserialize(Archive &ar) {
+        Registers<p> out;
+        for (size_t i = 0; i != out.size(); ++i)
+            out[i] =
+                std::move(Serialization<Archive, uint64_t>::Deserialize(ar));
+        return out;
+    }
+    static constexpr bool is_fixed_size =
+        Serialization<Archive, uint64_t>::is_fixed_size;
+    static constexpr size_t fixed_size =
+        (1 << p) * Serialization<Archive, uint64_t>::fixed_size;
+};
+}
+
 namespace api {
 // This siphash imlementation is taken from
 // https://github.com/floodyberry/siphash
@@ -92,8 +122,8 @@ uint64_t siphash(const unsigned char key[16], const unsigned char *m,
 template <typename Value> uint64_t hash(const Value &val) {
     const unsigned char key[16] = {0, 0, 0, 0, 0, 0, 0, 0x4,
                                    0, 0, 0, 0, 0, 0, 0, 0x7};
-    return siphash(
-        key, reinterpret_cast<const unsigned char *>(&val), sizeof(Value));
+    return siphash(key, reinterpret_cast<const unsigned char *>(&val),
+                   sizeof(Value));
 }
 
 // TODO: check that it was not used anywhere
@@ -105,28 +135,24 @@ template <> constexpr double alpha<4> = 0.673;
 template <> constexpr double alpha<5> = 0.697;
 template <> constexpr double alpha<6> = 0.709;
 
-// TODO We should wrap this in a separate type but I’m too lazy to figure
-// out the serialization right now
-template <size_t p> using Registers = std::array<uint64_t, p>;
-
 template <typename ValueType, size_t p>
-static void insertInRegisters(Registers<1 << p> &registers,
-                              const ValueType &value) {
+static void insertInRegisters(Registers<p> &registers, const ValueType &value) {
     // first p bits are the index
     uint64_t hashVal = static_cast<uint64_t>(hash<ValueType>(value));
     uint64_t index = hashVal >> (64 - p);
     uint64_t val = hashVal << p;
-        // Check for off-by-one
+    // Check for off-by-one
     // __builtin_clz does not return the correct value for uint64_t
-    static_assert(sizeof(long long) * CHAR_BIT == 64, "64 Bit long long are required for hyperloglog.");
+    static_assert(sizeof(long long) * CHAR_BIT == 64,
+                  "64 Bit long long are required for hyperloglog.");
     uint64_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
     registers[index] = std::max(leadingZeroes + 1, registers[index]);
 }
 
 template <size_t p>
-static Registers<1 << p> combineRegisters(Registers<1 << p> &registers1,
-                                          const Registers<1 << p> &registers2) {
+static Registers<p> combineRegisters(Registers<p> &registers1,
+                                     const Registers<p> &registers2) {
     const size_t m = 1 << p;
     assert(m == registers1.size());
     assert(m == registers2.size());
@@ -140,10 +166,10 @@ static Registers<1 << p> combineRegisters(Registers<1 << p> &registers1,
  * \ingroup api_layer
  */
 template <size_t p, typename ValueType>
-class HyperLogLogNode final : public ActionResultNode<Registers<1 << p>> {
+class HyperLogLogNode final : public ActionResultNode<Registers<p>> {
     static constexpr bool debug = false;
 
-    using Super = ActionResultNode<Registers<1 << p>>;
+    using Super = ActionResultNode<Registers<p>>;
     using Super::context_;
 
   public:
@@ -169,10 +195,10 @@ class HyperLogLogNode final : public ActionResultNode<Registers<1 << p>> {
     }
 
     //! Returns result of global sum.
-    const Registers<1 << p> &result() const final { return registers; }
+    const Registers<p> &result() const final { return registers; }
 
   private:
-    Registers<1 << p> registers;
+    Registers<p> registers;
 };
 
 template <typename ValueType, typename Stack>
