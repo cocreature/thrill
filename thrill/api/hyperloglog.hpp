@@ -14,23 +14,11 @@
 
 #include <thrill/api/all_reduce.hpp>
 #include <thrill/common/functional.hpp>
-
+#include <limits.h>
 #include <iostream>
 
 namespace thrill {
 namespace api {
-
-    int leadingZeros(uint64_t val) {
-         uint32_t upper = val >> 32;
-
-        if (upper == 0) {
-            uint32_t lower = val; // lower
-            return 32 + __builtin_clz(lower);
-        } else {
-            return __builtin_clz(upper);
-        }
-    }
-
 // This siphash imlementation is taken from
 // https://github.com/floodyberry/siphash
 #define ROTL64(a, b) (((a) << (b)) | ((a) >> (64 - b)))
@@ -130,7 +118,8 @@ static void insertInRegisters(Registers<1 << p> &registers,
     uint64_t val = hashVal << p;
         // Check for off-by-one
     // __builtin_clz does not return the correct value for uint64_t
-    uint64_t leadingZeroes = val == 0 ? (64 - p) : leadingZeros(val);
+    static_assert(sizeof(long long) * CHAR_BIT == 64, "64 Bit long long are required for hyperloglog.");
+    uint64_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
     assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
     registers[index] = std::max(leadingZeroes + 1, registers[index]);
 }
