@@ -22,8 +22,8 @@
 
 namespace thrill {
 template <size_t p> struct Registers {
-    Registers() : entries{} {}
-    std::array<uint64_t, 1 << p> entries;
+    std::vector<uint64_t> entries;
+    Registers() : entries(1 << p, 0) {}
     uint64_t &operator[](size_t idx) { return entries[idx]; }
     const uint64_t &operator[](size_t idx) const { return entries[idx]; }
     size_t size() const { return entries.size(); }
