@@ -20,7 +20,7 @@
 namespace thrill {
 namespace api {
 
-static const size_t NUMBER_OF_REGISTERS = 54815;
+static const size_t NUMBER_OF_REGISTERS = 54816;
 using Registers = std::vector<uint32_t>;
 
 template <typename ValueType>
