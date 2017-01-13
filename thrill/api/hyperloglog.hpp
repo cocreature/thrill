@@ -107,7 +107,10 @@ template <size_t p> struct Registers {
     std::vector<std::pair<size_t, uint64_t>> sparseList;
     std::vector<std::pair<size_t, uint64_t>> tmpSet;
     std::vector<uint64_t> entries;
-    Registers() : format(RegisterFormat::SPARSE) {}
+    Registers() : format(RegisterFormat::SPARSE) {
+        // Disable sparse representation for now
+        toDense();
+    }
     size_t size() const { return entries.size(); }
     void toDense() {
         assert(format == RegisterFormat::SPARSE);
