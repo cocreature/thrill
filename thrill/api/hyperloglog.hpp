@@ -20,7 +20,7 @@
 namespace thrill {
 namespace api {
 
-static const size_t NUMBER_OF_REGISTERS = 54816;
+static const size_t NUMBER_OF_REGISTERS = 54815;
 using Registers = std::vector<uint32_t>;
 
 template <typename ValueType>
@@ -54,7 +54,7 @@ template <typename ValueType, typename Stack>
 double DIA<ValueType, Stack>::HyperLogLog() const {
     assert(IsValid());
     auto node =
-        common::MakeCounting<HyperLogLogNode<ValueType>>(*this, "AllReduce");
+        common::MakeCounting<HyperLogLogNode<ValueType>>(*this, "HyperLogLog");
     node->RunScope();
     return 0.0;
 }
