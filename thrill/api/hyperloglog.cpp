@@ -2,7 +2,7 @@
 
 namespace thrill {
 namespace api {
-int binarySearch(double rawEstimate, std::vector<double> estimatedData) {
+int binarySearch(double rawEstimate, const std::vector<double> &estimatedData) {
     int length = estimatedData.size();
 
     int middle = length / 2;
@@ -22,8 +22,8 @@ int binarySearch(double rawEstimate, std::vector<double> estimatedData) {
 }
 
 double knearestNeighbor(int k, int index, double estimate,
-                        std::vector<double> bias,
-                        std::vector<double> estimateData) {
+                        const std::vector<double> &bias,
+                        const std::vector<double> &estimateData) {
     double sum = 0;
     int estimateDataLength = estimateData.size();
 

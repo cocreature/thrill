@@ -178,11 +178,11 @@ template <> constexpr double alpha<6> = 0.709;
 
 template <size_t p> static double threshold() { return thresholds[p - 4]; }
 
-int binarySearch(double rawEstimate, std::vector<double> estimatedData);
+int binarySearch(double rawEstimate, const std::vector<double> &estimatedData);
 
 double knearestNeighbor(int k, int index, double estimate,
-                        std::vector<double> bias,
-                        std::vector<double> estimateData);
+                        const std::vector<double> &bias,
+                        const std::vector<double> &estimateData);
 template <size_t p> static double estimateBias(double rawEstimate) {
     /**
      * 1. Find Elements in rawEstimateData (binary Search)
