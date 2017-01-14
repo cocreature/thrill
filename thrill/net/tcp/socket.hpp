@@ -58,11 +58,11 @@ public:
     explicit Socket(int fd, bool loopback_socket = false)
         : fd_(fd) {
         SetNoDelay(true);
-        if (!loopback_socket) {
+        // if (!loopback_socket) {
             // enable large send and receive kernel buffers
             SetSndBuf(4 * 1024 * 1024);
             SetRcvBuf(4 * 1024 * 1024);
-        }
+        // }
     }
 
     //! default constructor: invalid socket.
