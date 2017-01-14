@@ -50,6 +50,9 @@ TEST(Operations, HyperLogLog) {
         estimate = indices.HyperLogLog<14>();
         LOG << "hyperloglog with p=" << 14 << ": " << estimate
             << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<16>();
+        LOG << "hyperloglog with p=" << 16 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
 
         LOG << "###################################################";
         LOG << "hyperloglog for small counts";
@@ -73,6 +76,9 @@ TEST(Operations, HyperLogLog) {
             << ", relative error: " << relativeError(n, estimate);
         estimate = indices.HyperLogLog<12>();
         LOG << "hyperloglog with p=" << 12 << ": " << estimate
+            << ", relative error: " << relativeError(n, estimate);
+        estimate = indices.HyperLogLog<14>();
+        LOG << "hyperloglog with p=" << 14 << ": " << estimate
             << ", relative error: " << relativeError(n, estimate);
         estimate = indices.HyperLogLog<14>();
         LOG << "hyperloglog with p=" << 14 << ": " << estimate
