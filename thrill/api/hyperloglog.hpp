@@ -40,10 +40,7 @@ template <size_t p> struct Registers {
     std::vector<std::pair<size_t, uint64_t>> sparseList;
     std::vector<std::pair<size_t, uint64_t>> tmpSet;
     std::vector<uint64_t> entries;
-    Registers() : format(RegisterFormat::SPARSE) {
-        // Disable sparse representation for now
-        toDense();
-    }
+    Registers() : format(RegisterFormat::SPARSE) {}
     size_t size() const { return entries.size(); }
     void toDense() {
         assert(format == RegisterFormat::SPARSE);
@@ -94,24 +91,28 @@ template <size_t p> struct Registers {
         while (it1 != sparseList.end()) {
             if (it2 == tmpSet.end()) {
                 resultVec.insert(resultVec.end(), it1, sparseList.end());
+                // This is only done to satisfy the assertion below
+                it1 = sparseList.end();
                 break;
-            }
-            if (it1->first < it2->first) {
+            } else if (it1->first < it2->first) {
                 resultVec.push_back(*it1);
+                ++it1;
             } else if (it1->first > it2->first) {
                 resultVec.push_back(*it2);
+                ++it2;
             } else {
                 size_t idx = it1->first;
                 auto maxVal = std::max(it1->second, it2->second);
-                for (; it1 != sparseList.end() && it1->first == idx; ++it1) {
-                    maxVal = std::max(maxVal, it1->second);
-                }
-                for (; it2 != sparseList.end() && it2->first == idx; ++it2) {
+                // tmpSet can contain consecutive entries with the same key, so
+                // we need to find the maximum
+                for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
                     maxVal = std::max(maxVal, it2->second);
                 }
+                ++it1;
                 resultVec.emplace_back(idx, maxVal);
             }
         }
+        assert(it1 == sparseList.end());
         resultVec.insert(resultVec.end(), it2, tmpSet.end());
         tmpSet.clear();
         tmpSet.shrink_to_fit();
