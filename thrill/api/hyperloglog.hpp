@@ -84,25 +84,31 @@ template <size_t p> struct Registers {
         }
     }
     void mergeSparse() {
+        assert(std::is_sorted(sparseList.begin(), sparseList.end()));
         std::sort(tmpSet.begin(), tmpSet.end());
         std::vector<std::pair<size_t, uint64_t>> resultVec;
         auto it1 = sparseList.begin();
         auto it2 = tmpSet.begin();
         while (it1 != sparseList.end()) {
+            assert(resultVec.empty() || it2 == tmpSet.end() || resultVec.back().first < it1->first || resultVec.back().first < it2->first);
             if (it2 == tmpSet.end()) {
                 resultVec.insert(resultVec.end(), it1, sparseList.end());
                 // This is only done to satisfy the assertion below
                 it1 = sparseList.end();
                 break;
             } else if (it1->first < it2->first) {
-                resultVec.push_back(*it1);
+                resultVec.emplace_back(*it1);
                 ++it1;
             } else if (it1->first > it2->first) {
-                resultVec.push_back(*it2);
-                ++it2;
+                size_t idx = it2->first;
+                auto maxVal = it2->second;
+                for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
+                    maxVal = std::max(maxVal, it2->second);
+                }
+                resultVec.emplace_back(idx, maxVal);
             } else {
                 size_t idx = it1->first;
-                auto maxVal = std::max(it1->second, it2->second);
+                auto maxVal = it1->second;
                 // tmpSet can contain consecutive entries with the same key, so
                 // we need to find the maximum
                 for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
@@ -113,10 +119,19 @@ template <size_t p> struct Registers {
             }
         }
         assert(it1 == sparseList.end());
-        resultVec.insert(resultVec.end(), it2, tmpSet.end());
+        assert(it2 <= tmpSet.end());
+        // Insert the rest of tmpSet in resultVec but take the maximum if there are multiple values associated with a key
+        while (it2 != tmpSet.end()) {
+            size_t idx = it2->first;
+            auto maxVal = it2->second;
+            for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
+                maxVal = std::max(maxVal, it2->second);
+            }
+            resultVec.emplace_back(idx, maxVal);
+        }
         tmpSet.clear();
         tmpSet.shrink_to_fit();
-        sparseList = resultVec;
+        sparseList = std::move(resultVec);
     }
 };
 
