@@ -32,6 +32,14 @@ template <typename Value> uint64_t hash(const Value &val) {
                         sizeof(Value));
 }
 
+template <typename ForwardIt, typename Idx, typename Value>
+Value getMaximumValue(ForwardIt &cur, ForwardIt end, Idx idx, Value value) {
+    for (; cur != end && cur->first == idx; ++cur) {
+        value = std::max(value, cur->second);
+    }
+    return value;
+}
+
 enum class RegisterFormat { SPARSE, DENSE };
 template <size_t p> struct Registers {
     static const size_t MAX_SPARSELIST_SIZE = 200;
@@ -90,7 +98,9 @@ template <size_t p> struct Registers {
         auto it1 = sparseList.begin();
         auto it2 = tmpSet.begin();
         while (it1 != sparseList.end()) {
-            assert(resultVec.empty() || it2 == tmpSet.end() || resultVec.back().first < it1->first || resultVec.back().first < it2->first);
+            assert(resultVec.empty() || it2 == tmpSet.end() ||
+                   resultVec.back().first < it1->first ||
+                   resultVec.back().first < it2->first);
             if (it2 == tmpSet.end()) {
                 resultVec.insert(resultVec.end(), it1, sparseList.end());
                 // This is only done to satisfy the assertion below
@@ -101,34 +111,22 @@ template <size_t p> struct Registers {
                 ++it1;
             } else if (it1->first > it2->first) {
                 size_t idx = it2->first;
-                auto maxVal = it2->second;
-                for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
-                    maxVal = std::max(maxVal, it2->second);
-                }
+                auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it2->second);
                 resultVec.emplace_back(idx, maxVal);
             } else {
                 size_t idx = it1->first;
-                auto maxVal = it1->second;
-                // tmpSet can contain consecutive entries with the same key, so
-                // we need to find the maximum
-                for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
-                    maxVal = std::max(maxVal, it2->second);
-                }
-                ++it1;
+                auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it1->second);
                 resultVec.emplace_back(idx, maxVal);
+                ++it1;
             }
         }
-        assert(it1 == sparseList.end());
-        assert(it2 <= tmpSet.end());
-        // Insert the rest of tmpSet in resultVec but take the maximum if there are multiple values associated with a key
         while (it2 != tmpSet.end()) {
             size_t idx = it2->first;
-            auto maxVal = it2->second;
-            for (; it2 != tmpSet.end() && it2->first == idx; ++it2) {
-                maxVal = std::max(maxVal, it2->second);
-            }
+            auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it2->second);
             resultVec.emplace_back(idx, maxVal);
         }
+        assert(it1 == sparseList.end());
+        assert(it2 == tmpSet.end());
         tmpSet.clear();
         tmpSet.shrink_to_fit();
         sparseList = std::move(resultVec);
