@@ -18,6 +18,7 @@
 
 #include <thrill/api/all_reduce.hpp>
 #include <thrill/common/functional.hpp>
+#include <thrill/api/distribute.hpp>
 
 namespace thrill {
 namespace api {
@@ -48,7 +49,7 @@ template <size_t p> struct Registers {
     std::vector<std::pair<size_t, uint64_t>> sparseList;
     std::vector<std::pair<size_t, uint64_t>> tmpSet;
     std::vector<uint64_t> entries;
-    Registers() : format(RegisterFormat::SPARSE) {}
+    Registers() : format(RegisterFormat::SPARSE) { }
     size_t size() const { return entries.size(); }
     void toDense() {
         assert(format == RegisterFormat::SPARSE);
@@ -301,15 +302,24 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     }
 
     const size_t m = 1 << p;
-    double E = 0;
-    unsigned V = 0;
     assert(reducedRegisters.size() == m);
-    for (size_t i = 0; i < m; ++i) {
-        E += std::pow(2.0, -static_cast<double>(reducedRegisters.entries[i]));
-        if (reducedRegisters.entries[i] == 0) {
-            V++;
+
+    DIA<uint64_t> distributedEntries = Distribute<uint64_t>(this->ctx(), reducedRegisters.entries);
+
+    std::pair<double, unsigned int> pairEV = distributedEntries.Map(
+        [this](const uint64_t &entry) {
+            return std::pair<double, unsigned int>(std::pow(2.0, -static_cast<double>(entry)), entry == 0 ? 1 : 0);
         }
-    }
+    ).AllReduce(
+        [this](const std::pair<double, unsigned int>& valA, const std::pair<double, unsigned int>& valB) {
+            return std::pair<double, unsigned int>(valA.first + valB.first, valA.second + valB.second);
+        },
+        std::pair<double, unsigned int>(0.0, 0)
+    );
+
+    double E = pairEV.first;
+    unsigned V = pairEV.second;
+
     E = alpha<p> * m * m / E;
     double E_ = E;
     if (E <= 5 * m) {
