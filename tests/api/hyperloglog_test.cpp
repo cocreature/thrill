@@ -88,3 +88,49 @@ TEST(Operations, HyperLogLog) {
 
     thrill::Run([&](thrill::Context &ctx) { start_func(ctx); });
 }
+TEST(Operations, encodeHash) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis(0, 18446744073709551615u);
+
+    for (int n = 0; n < 1000; ++n) {
+        uint64_t random = dis(gen);
+        uint32_t index = random >> (64 - 25);
+        uint64_t valueBits = random << 25;
+        uint8_t value = valueBits == 0 ? (64 - 25) : __builtin_clzll(valueBits);
+        value++;
+        uint32_t encoded = encodeHash<25>(random);
+        auto decoded = splitSparseRegister<25>(encoded);
+        ASSERT_EQ(index, decoded.first);
+        ASSERT_EQ(value, decoded.second);
+    }
+}
+TEST(Operations, decodeHash) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint64_t> dis(0, 18446744073709551615u);
+    uint32_t densePrecision = 4;
+    for (int n = 0; n < 1000; ++n) {
+        uint64_t random = dis(gen);
+        uint32_t index = random >> (64 - densePrecision);
+        uint64_t valueBits = random << densePrecision;
+        uint8_t value = valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
+        value++;
+        uint32_t encoded = encodeHash<25>(random);
+        auto decoded = decodeHash<25, 4>(encoded);
+        ASSERT_EQ(index, decoded.first);
+        ASSERT_EQ(value, decoded.second);
+    }
+    densePrecision = 12;
+    for (int n = 0; n < 1000; ++n) {
+        uint64_t random = dis(gen);
+        uint32_t index = random >> (64 - densePrecision);
+        uint64_t valueBits = random << densePrecision;
+        uint8_t value = valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
+        value++;
+        uint32_t encoded = encodeHash<25>(random);
+        auto decoded = decodeHash<25, 12>(encoded);
+        ASSERT_EQ(index, decoded.first);
+        ASSERT_EQ(value, decoded.second);
+    }
+}

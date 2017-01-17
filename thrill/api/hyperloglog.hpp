@@ -33,35 +33,110 @@ template <typename Value> uint64_t hash(const Value &val) {
                         sizeof(Value));
 }
 
-template <typename ForwardIt, typename Idx, typename Value>
-Value getMaximumValue(ForwardIt &cur, ForwardIt end, Idx idx, Value value) {
-    for (; cur != end && cur->first == idx; ++cur) {
-        value = std::max(value, cur->second);
-    }
-    return value;
-}
+// The high 25 bit in this register are used for the index, the next 6 bits for
+// the value and the last bit is currently unused
+using SparseRegister = uint32_t;
 
 enum class RegisterFormat { SPARSE, DENSE };
+
+template <const uint64_t n>
+const uint64_t lowerNBitMask = (static_cast<uint64_t>(1) << n) - 1;
+template <uint32_t n>
+const uint32_t upperNBitMask = ~(static_cast<uint32_t>((1 << (32 - n)) - 1));
+template <size_t sparsePrecision, size_t densePrecision>
+std::pair<size_t, uint8_t> decodeHash(SparseRegister reg) {
+    static_assert(sparsePrecision >= densePrecision,
+                  "densePrecision must not be greater than sparsePrecision");
+    uint32_t index = reg >> (32 - densePrecision);
+    // First zero bottom bits, then shift the bits used for the new index to the
+    // left
+    uint32_t topBitsValue =
+        (reg & upperNBitMask<sparsePrecision>) << densePrecision;
+    uint32_t sparseValue = (reg >> 1) & lowerNBitMask<6>;
+    uint32_t denseValue;
+    if (topBitsValue == 0) {
+        denseValue = sparseValue + (sparsePrecision - densePrecision);
+    } else {
+        denseValue = __builtin_clz(topBitsValue) + 1;
+    }
+    return {index, denseValue};
+}
+
+template <size_t precision>
+std::pair<uint32_t, uint8_t> splitSparseRegister(SparseRegister reg) {
+    uint8_t value = (reg & lowerNBitMask<32 - precision>) >> 1;
+    uint32_t idx = reg >> (32 - precision);
+    return {idx, value};
+}
+
+template <size_t precision> uint32_t encodePair(uint32_t index, uint8_t value) {
+    return (index << (32 - precision)) | (value << 1);
+}
+
+template <size_t precision> uint32_t encodeHash(uint64_t hash) {
+    static_assert(precision <= 32, "precision must be smaller than 32");
+    // precision bits are used for the index, the rest is used as the value
+    uint64_t valueBits = hash << precision;
+    static_assert(sizeof(long long) * CHAR_BIT == 64,
+                  "64 bit long long are required for hyperloglog.");
+    uint8_t leadingZeroes =
+        valueBits == 0 ? (64 - precision) : __builtin_clzll(valueBits);
+    auto encoded =
+        encodePair<precision>(hash >> (64 - precision), leadingZeroes + 1);
+    return encoded;
+}
+
+template <size_t precision>
+std::vector<SparseRegister>
+mergeSameIndices(const std::vector<SparseRegister> &sparseList) {
+    if (sparseList.empty()) {
+        return {};
+    }
+    auto it = sparseList.begin();
+    std::vector<SparseRegister> mergedSparseList = {*it};
+    ++it;
+    std::pair<size_t, uint8_t> lastEntry =
+        splitSparseRegister<precision>(mergedSparseList.back());
+    for (; it != sparseList.end(); ++it) {
+        auto decoded = splitSparseRegister<precision>(*it);
+        assert(decoded.first >= lastEntry.first);
+        if (decoded.first > lastEntry.first) {
+            mergedSparseList.emplace_back(*it);
+        } else {
+            assert(decoded.second >= lastEntry.second);
+            mergedSparseList.back() = *it;
+        }
+        lastEntry = decoded;
+    }
+    return mergedSparseList;
+}
+
 template <size_t p> struct Registers {
     static const size_t MAX_SPARSELIST_SIZE = 200;
     static const size_t MAX_TMPSET_SIZE = 40;
     RegisterFormat format;
     // Register values are always smaller than 64. We thus need log2(64) = 6
     // bits to store them. In particular an uint8_t is sufficient
-    std::vector<std::pair<size_t, uint8_t>> sparseList;
-    std::vector<std::pair<size_t, uint8_t>> tmpSet;
+    std::vector<SparseRegister> sparseList;
+    std::vector<SparseRegister> tmpSet;
     std::vector<uint8_t> entries;
-    Registers() : format(RegisterFormat::SPARSE) {}
+    Registers() : format(RegisterFormat::SPARSE) {
+        // toDense();
+    }
     size_t size() const { return entries.size(); }
     void toDense() {
         assert(format == RegisterFormat::SPARSE);
         format = RegisterFormat::DENSE;
         entries.resize(1 << p, 0);
         for (auto &val : sparseList) {
-            entries[val.first] = val.second;
+            auto decoded = decodeHash<25, p>(val);
+            entries[decoded.first] =
+                std::max(entries[decoded.first], decoded.second);
         }
         for (auto &val : tmpSet) {
-            entries[val.first] = std::max(entries[val.first], val.second);
+            auto decoded = decodeHash<25, p>(val);
+            entries[decoded.first] =
+                std::max(entries[decoded.first], decoded.second);
         }
         sparseList.clear();
         tmpSet.clear();
@@ -71,17 +146,11 @@ template <size_t p> struct Registers {
     template <typename ValueType> void insert(const ValueType &value) {
         // first p bits are the index
         uint64_t hashVal = hash<ValueType>(value);
-        uint64_t index = hashVal >> (64 - p);
-        uint64_t val = hashVal << p;
-        // Check for off-by-one
-        // __builtin_clz does not return the correct value for uint64_t
         static_assert(sizeof(long long) * CHAR_BIT == 64,
                       "64 Bit long long are required for hyperloglog.");
-        uint8_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
-        assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
         switch (format) {
         case RegisterFormat::SPARSE:
-            tmpSet.emplace_back(index, leadingZeroes + 1);
+            tmpSet.emplace_back(encodeHash<25>(hashVal));
             if (tmpSet.size() > MAX_TMPSET_SIZE) {
                 mergeSparse();
             }
@@ -90,51 +159,24 @@ template <size_t p> struct Registers {
             }
             break;
         case RegisterFormat::DENSE:
-            entries[index] = std::max<uint8_t>(leadingZeroes + 1, entries[index]);
+            uint64_t index = hashVal >> (64 - p);
+            uint64_t val = hashVal << p;
+            uint8_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
+            assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
+            entries[index] =
+                std::max<uint8_t>(leadingZeroes + 1, entries[index]);
             break;
         }
     }
     void mergeSparse() {
         assert(std::is_sorted(sparseList.begin(), sparseList.end()));
         std::sort(tmpSet.begin(), tmpSet.end());
-        std::vector<std::pair<size_t, uint8_t>> resultVec;
-        auto it1 = sparseList.begin();
-        auto it2 = tmpSet.begin();
-        while (it1 != sparseList.end()) {
-            assert(resultVec.empty() || it2 == tmpSet.end() ||
-                   resultVec.back().first < it1->first ||
-                   resultVec.back().first < it2->first);
-            if (it2 == tmpSet.end()) {
-                resultVec.insert(resultVec.end(), it1, sparseList.end());
-                // This is only done to satisfy the assertion below
-                it1 = sparseList.end();
-                break;
-            } else if (it1->first < it2->first) {
-                resultVec.emplace_back(*it1);
-                ++it1;
-            } else if (it1->first > it2->first) {
-                size_t idx = it2->first;
-                auto maxVal =
-                    getMaximumValue(it2, tmpSet.end(), idx, it2->second);
-                resultVec.emplace_back(idx, maxVal);
-            } else {
-                size_t idx = it1->first;
-                auto maxVal =
-                    getMaximumValue(it2, tmpSet.end(), idx, it1->second);
-                resultVec.emplace_back(idx, maxVal);
-                ++it1;
-            }
-        }
-        while (it2 != tmpSet.end()) {
-            size_t idx = it2->first;
-            auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it2->second);
-            resultVec.emplace_back(idx, maxVal);
-        }
-        assert(it1 == sparseList.end());
-        assert(it2 == tmpSet.end());
+        std::vector<SparseRegister> resultVec;
+        std::merge(sparseList.begin(), sparseList.end(), tmpSet.begin(),
+                   tmpSet.end(), std::back_inserter(resultVec));
         tmpSet.clear();
         tmpSet.shrink_to_fit();
-        sparseList = std::move(resultVec);
+        sparseList = mergeSameIndices<25>(resultVec);
     }
 };
 
