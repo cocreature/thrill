@@ -17,8 +17,8 @@
 #include <limits.h>
 
 #include <thrill/api/all_reduce.hpp>
-#include <thrill/common/functional.hpp>
 #include <thrill/api/distribute.hpp>
+#include <thrill/common/functional.hpp>
 
 namespace thrill {
 namespace api {
@@ -46,10 +46,12 @@ template <size_t p> struct Registers {
     static const size_t MAX_SPARSELIST_SIZE = 200;
     static const size_t MAX_TMPSET_SIZE = 40;
     RegisterFormat format;
-    std::vector<std::pair<size_t, uint64_t>> sparseList;
-    std::vector<std::pair<size_t, uint64_t>> tmpSet;
-    std::vector<uint64_t> entries;
-    Registers() : format(RegisterFormat::SPARSE) { }
+    // Register values are always smaller than 64. We thus need log2(64) = 6
+    // bits to store them. In particular an uint8_t is sufficient
+    std::vector<std::pair<size_t, uint8_t>> sparseList;
+    std::vector<std::pair<size_t, uint8_t>> tmpSet;
+    std::vector<uint8_t> entries;
+    Registers() : format(RegisterFormat::SPARSE) {}
     size_t size() const { return entries.size(); }
     void toDense() {
         assert(format == RegisterFormat::SPARSE);
@@ -68,14 +70,14 @@ template <size_t p> struct Registers {
     }
     template <typename ValueType> void insert(const ValueType &value) {
         // first p bits are the index
-        uint64_t hashVal = static_cast<uint64_t>(hash<ValueType>(value));
+        uint64_t hashVal = hash<ValueType>(value);
         uint64_t index = hashVal >> (64 - p);
         uint64_t val = hashVal << p;
         // Check for off-by-one
         // __builtin_clz does not return the correct value for uint64_t
         static_assert(sizeof(long long) * CHAR_BIT == 64,
                       "64 Bit long long are required for hyperloglog.");
-        uint64_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
+        uint8_t leadingZeroes = val == 0 ? (64 - p) : __builtin_clzll(val);
         assert(leadingZeroes >= 0 && leadingZeroes <= (64 - p));
         switch (format) {
         case RegisterFormat::SPARSE:
@@ -88,14 +90,14 @@ template <size_t p> struct Registers {
             }
             break;
         case RegisterFormat::DENSE:
-            entries[index] = std::max(leadingZeroes + 1, entries[index]);
+            entries[index] = std::max<uint8_t>(leadingZeroes + 1, entries[index]);
             break;
         }
     }
     void mergeSparse() {
         assert(std::is_sorted(sparseList.begin(), sparseList.end()));
         std::sort(tmpSet.begin(), tmpSet.end());
-        std::vector<std::pair<size_t, uint64_t>> resultVec;
+        std::vector<std::pair<size_t, uint8_t>> resultVec;
         auto it1 = sparseList.begin();
         auto it2 = tmpSet.begin();
         while (it1 != sparseList.end()) {
@@ -112,11 +114,13 @@ template <size_t p> struct Registers {
                 ++it1;
             } else if (it1->first > it2->first) {
                 size_t idx = it2->first;
-                auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it2->second);
+                auto maxVal =
+                    getMaximumValue(it2, tmpSet.end(), idx, it2->second);
                 resultVec.emplace_back(idx, maxVal);
             } else {
                 size_t idx = it1->first;
-                auto maxVal = getMaximumValue(it2, tmpSet.end(), idx, it1->second);
+                auto maxVal =
+                    getMaximumValue(it2, tmpSet.end(), idx, it1->second);
                 resultVec.emplace_back(idx, maxVal);
                 ++it1;
             }
@@ -304,18 +308,23 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     const size_t m = 1 << p;
     assert(reducedRegisters.size() == m);
 
-    DIA<uint64_t> distributedEntries = Distribute<uint64_t>(this->ctx(), reducedRegisters.entries);
+    DIA<uint8_t> distributedEntries =
+        Distribute<uint8_t>(this->ctx(), reducedRegisters.entries);
 
-    std::pair<double, unsigned int> pairEV = distributedEntries.Map(
-        [this](const uint64_t &entry) {
-            return std::pair<double, unsigned int>(std::pow(2.0, -static_cast<double>(entry)), entry == 0 ? 1 : 0);
-        }
-    ).AllReduce(
-        [this](const std::pair<double, unsigned int>& valA, const std::pair<double, unsigned int>& valB) {
-            return std::pair<double, unsigned int>(valA.first + valB.first, valA.second + valB.second);
-        },
-        std::pair<double, unsigned int>(0.0, 0)
-    );
+    std::pair<double, unsigned int> pairEV =
+        distributedEntries
+            .Map([this](const uint64_t &entry) {
+                return std::pair<double, unsigned int>(
+                    std::pow(2.0, -static_cast<double>(entry)),
+                    entry == 0 ? 1 : 0);
+            })
+            .AllReduce(
+                [this](const std::pair<double, unsigned int> &valA,
+                       const std::pair<double, unsigned int> &valB) {
+                    return std::pair<double, unsigned int>(
+                        valA.first + valB.first, valA.second + valB.second);
+                },
+                std::pair<double, unsigned int>(0.0, 0));
 
     double E = pairEV.first;
     unsigned V = pairEV.second;
