@@ -75,19 +75,4 @@ std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList) {
     }
     return sparseListBuffer;
 }
-
-std::vector<uint32_t>
-decodeSparseList(const std::vector<uint8_t> &sparseListBuffer) {
-    if (sparseListBuffer.empty()) {
-        return {};
-    }
-    std::vector<uint32_t> sparseList;
-    sparseList.reserve(sparseListBuffer.size());
-    VectorReader reader(sparseListBuffer);
-    sparseList.emplace_back(reader.GetVarint32());
-    while (!reader.reachedEnd()) {
-        sparseList.emplace_back(sparseList.back() + reader.GetVarint32());
-    }
-    return sparseList;
-}
 }

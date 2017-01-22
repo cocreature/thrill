@@ -152,7 +152,12 @@ TEST(Operations, sparseListEncoding) {
         }
         std::sort(input.begin(), input.end());
         std::vector<uint8_t> encoded = encodeSparseList(input);
-        std::vector<uint32_t> decoded = decodeSparseList(encoded);
+
+        std::vector<uint32_t> decoded;
+        DecodedSparseList decodedSparseList(encoded);
+        for (auto val : decodedSparseList) {
+            decoded.emplace_back(val);
+        }
         ASSERT_EQ(input, decoded);
     }
 }

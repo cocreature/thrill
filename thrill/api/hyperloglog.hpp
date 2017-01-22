@@ -122,21 +122,59 @@ class VectorWriter : public common::ItemWriterToolsBase<VectorWriter> {
     }
 };
 
-class VectorReader : public common::ItemReaderToolsBase<VectorReader> {
-    std::vector<uint8_t>::const_iterator iterator;
-    std::vector<uint8_t>::const_iterator endIt;
+template <typename ForwardIt>
+class SparseListIterator
+    : public common::ItemReaderToolsBase<SparseListIterator<ForwardIt>>,
+      public std::iterator<std::forward_iterator_tag, uint32_t, std::ptrdiff_t,
+                           void, void> {
+    ForwardIt iterator;
+    uint32_t lastVal = 0;
+    static_assert(std::is_same<typename ForwardIt::value_type, uint8_t>::value,
+                  "ForwardIt must return uint8_t");
 
   public:
-    VectorReader(const std::vector<uint8_t> &buffer)
-        : iterator(buffer.begin()), endIt(buffer.end()) {}
-    bool reachedEnd() { return iterator == endIt; }
+    explicit SparseListIterator(ForwardIt it) : iterator(it) {}
     uint8_t GetByte() { return *iterator++; }
+    SparseListIterator<ForwardIt> &operator++() {
+        lastVal = lastVal + this->GetVarint32();
+        return *this;
+    }
+    SparseListIterator<ForwardIt> operator++(int) {
+        SparseListIterator<ForwardIt> prev(*this);
+        ++*this;
+        return prev;
+    }
+    uint32_t operator*() {
+        ForwardIt prevIt = iterator;
+        uint32_t val = this->GetVarint32();
+        iterator = prevIt;
+        return lastVal + val;
+    }
+    bool operator==(const SparseListIterator<ForwardIt> &other) {
+        return iterator == other.iterator;
+    }
+    bool operator!=(const SparseListIterator<ForwardIt> &other) {
+        return !(*this == other);
+    }
+};
+
+template <typename ForwardIt>
+SparseListIterator<ForwardIt> makeSparseListIterator(ForwardIt it) {
+    return SparseListIterator<ForwardIt>(it);
+}
+
+class DecodedSparseList {
+    const std::vector<uint8_t> &sparseListBuffer;
+
+  public:
+    DecodedSparseList(const std::vector<uint8_t> &sparseListBuf)
+        : sparseListBuffer(sparseListBuf) {}
+    auto begin() { return makeSparseListIterator(sparseListBuffer.begin()); }
+    auto end() { return makeSparseListIterator(sparseListBuffer.end()); }
 };
 
 // Perform a varint and a difference encoding
 std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList);
-std::vector<uint32_t>
-decodeSparseList(const std::vector<uint8_t> &sparseListBuffer);
 
 template <size_t p> struct Registers {
     static const size_t MAX_SPARSELIST_SIZE = 200;
@@ -155,8 +193,7 @@ template <size_t p> struct Registers {
         assert(format == RegisterFormat::SPARSE);
         format = RegisterFormat::DENSE;
         entries.resize(1 << p, 0);
-        std::vector<uint32_t> sparseList = decodeSparseList(sparseListBuffer);
-        for (auto &val : sparseList) {
+        for (auto val : DecodedSparseList(sparseListBuffer)) {
             auto decoded = decodeHash<25, p>(val);
             entries[decoded.first] =
                 std::max(entries[decoded.first], decoded.second);
@@ -197,7 +234,7 @@ template <size_t p> struct Registers {
         }
     }
     void mergeSparse() {
-        std::vector<uint32_t> sparseList = decodeSparseList(sparseListBuffer);
+        DecodedSparseList sparseList(sparseListBuffer);
         assert(std::is_sorted(sparseList.begin(), sparseList.end()));
         std::sort(tmpSet.begin(), tmpSet.end());
         std::vector<SparseRegister> resultVec;
@@ -301,8 +338,7 @@ static Registers<p> combineRegisters(Registers<p> &registers1,
     assert(registers1.format == registers2.format);
     switch (registers1.format) {
     case RegisterFormat::SPARSE: {
-        std::vector<uint32_t> sparseList2 =
-            decodeSparseList(registers2.sparseListBuffer);
+        DecodedSparseList sparseList2(registers2.sparseListBuffer);
         registers1.tmpSet.insert(registers1.tmpSet.end(), sparseList2.begin(),
                                  sparseList2.end());
         registers1.tmpSet.insert(registers1.tmpSet.end(),
