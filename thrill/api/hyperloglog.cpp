@@ -57,4 +57,37 @@ double knearestNeighbor(int k, int index, double estimate,
     return sum / neighbors;
 }
 }
+
+std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList) {
+    if (sparseList.empty()) {
+        return {};
+    }
+    assert(std::is_sorted(sparseList.begin(), sparseList.end()));
+    std::vector<uint8_t> sparseListBuffer;
+    sparseListBuffer.reserve(sparseList.size());
+    VectorWriter writer(sparseListBuffer);
+    auto it = sparseList.begin();
+    uint32_t prevVal = *it++;
+    writer.PutVarint32(prevVal);
+    for (; it != sparseList.end(); ++it) {
+        writer.PutVarint32(*it - prevVal);
+        prevVal = *it;
+    }
+    return sparseListBuffer;
+}
+
+std::vector<uint32_t>
+decodeSparseList(const std::vector<uint8_t> &sparseListBuffer) {
+    if (sparseListBuffer.empty()) {
+        return {};
+    }
+    std::vector<uint32_t> sparseList;
+    sparseList.reserve(sparseListBuffer.size());
+    VectorReader reader(sparseListBuffer);
+    sparseList.emplace_back(reader.GetVarint32());
+    while (!reader.reachedEnd()) {
+        sparseList.emplace_back(sparseList.back() + reader.GetVarint32());
+    }
+    return sparseList;
+}
 }

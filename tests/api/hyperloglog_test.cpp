@@ -114,7 +114,8 @@ TEST(Operations, decodeHash) {
         uint64_t random = dis(gen);
         uint32_t index = random >> (64 - densePrecision);
         uint64_t valueBits = random << densePrecision;
-        uint8_t value = valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
+        uint8_t value =
+            valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
         value++;
         uint32_t encoded = encodeHash<25>(random);
         auto decoded = decodeHash<25, 4>(encoded);
@@ -126,11 +127,32 @@ TEST(Operations, decodeHash) {
         uint64_t random = dis(gen);
         uint32_t index = random >> (64 - densePrecision);
         uint64_t valueBits = random << densePrecision;
-        uint8_t value = valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
+        uint8_t value =
+            valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
         value++;
         uint32_t encoded = encodeHash<25>(random);
         auto decoded = decodeHash<25, 12>(encoded);
         ASSERT_EQ(index, decoded.first);
         ASSERT_EQ(value, decoded.second);
+    }
+}
+
+TEST(Operations, sparseListEncoding) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    std::uniform_int_distribution<uint32_t> dis(
+        0, std::numeric_limits<uint32_t>::max());
+    std::uniform_int_distribution<size_t> lengthDis(0, 10000);
+    for (size_t i = 0; i < 10; ++i) {
+        size_t length = lengthDis(gen);
+        std::vector<uint32_t> input;
+        input.reserve(length);
+        for (size_t j = 0; j < length; ++j) {
+            input.emplace_back(dis(gen));
+        }
+        std::sort(input.begin(), input.end());
+        std::vector<uint8_t> encoded = encodeSparseList(input);
+        std::vector<uint32_t> decoded = decodeSparseList(encoded);
+        ASSERT_EQ(input, decoded);
     }
 }

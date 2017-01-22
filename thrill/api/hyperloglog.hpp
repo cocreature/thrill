@@ -111,13 +111,40 @@ mergeSameIndices(const std::vector<SparseRegister> &sparseList) {
     return mergedSparseList;
 }
 
+class VectorWriter : public common::ItemWriterToolsBase<VectorWriter> {
+    std::vector<uint8_t> &buffer;
+
+  public:
+    VectorWriter(std::vector<uint8_t> &buffer) : buffer(buffer) {}
+    VectorWriter &PutByte(uint8_t data) {
+        buffer.emplace_back(data);
+        return *this;
+    }
+};
+
+class VectorReader : public common::ItemReaderToolsBase<VectorReader> {
+    std::vector<uint8_t>::const_iterator iterator;
+    std::vector<uint8_t>::const_iterator endIt;
+
+  public:
+    VectorReader(const std::vector<uint8_t> &buffer)
+        : iterator(buffer.begin()), endIt(buffer.end()) {}
+    bool reachedEnd() { return iterator == endIt; }
+    uint8_t GetByte() { return *iterator++; }
+};
+
+// Perform a varint and a difference encoding
+std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList);
+std::vector<uint32_t>
+decodeSparseList(const std::vector<uint8_t> &sparseListBuffer);
+
 template <size_t p> struct Registers {
     static const size_t MAX_SPARSELIST_SIZE = 200;
     static const size_t MAX_TMPSET_SIZE = 40;
     RegisterFormat format;
     // Register values are always smaller than 64. We thus need log2(64) = 6
     // bits to store them. In particular an uint8_t is sufficient
-    std::vector<SparseRegister> sparseList;
+    std::vector<uint8_t> sparseListBuffer;
     std::vector<SparseRegister> tmpSet;
     std::vector<uint8_t> entries;
     Registers() : format(RegisterFormat::SPARSE) {
@@ -128,6 +155,7 @@ template <size_t p> struct Registers {
         assert(format == RegisterFormat::SPARSE);
         format = RegisterFormat::DENSE;
         entries.resize(1 << p, 0);
+        std::vector<uint32_t> sparseList = decodeSparseList(sparseListBuffer);
         for (auto &val : sparseList) {
             auto decoded = decodeHash<25, p>(val);
             entries[decoded.first] =
@@ -138,9 +166,9 @@ template <size_t p> struct Registers {
             entries[decoded.first] =
                 std::max(entries[decoded.first], decoded.second);
         }
-        sparseList.clear();
+        sparseListBuffer.clear();
         tmpSet.clear();
-        sparseList.shrink_to_fit();
+        sparseListBuffer.shrink_to_fit();
         tmpSet.shrink_to_fit();
     }
     template <typename ValueType> void insert(const ValueType &value) {
@@ -154,7 +182,7 @@ template <size_t p> struct Registers {
             if (tmpSet.size() > MAX_TMPSET_SIZE) {
                 mergeSparse();
             }
-            if (sparseList.size() > MAX_SPARSELIST_SIZE) {
+            if (sparseListBuffer.size() > MAX_SPARSELIST_SIZE) {
                 toDense();
             }
             break;
@@ -169,6 +197,7 @@ template <size_t p> struct Registers {
         }
     }
     void mergeSparse() {
+        std::vector<uint32_t> sparseList = decodeSparseList(sparseListBuffer);
         assert(std::is_sorted(sparseList.begin(), sparseList.end()));
         std::sort(tmpSet.begin(), tmpSet.end());
         std::vector<SparseRegister> resultVec;
@@ -176,7 +205,7 @@ template <size_t p> struct Registers {
                    tmpSet.end(), std::back_inserter(resultVec));
         tmpSet.clear();
         tmpSet.shrink_to_fit();
-        sparseList = mergeSameIndices<25>(resultVec);
+        sparseListBuffer = encodeSparseList(mergeSameIndices<25>(resultVec));
     }
 };
 
@@ -188,8 +217,8 @@ struct Serialization<Archive, Registers<p>,
         Serialization<Archive, RegisterFormat>::Serialize(x.format, ar);
         switch (x.format) {
         case RegisterFormat::SPARSE:
-            Serialization<Archive, decltype(x.sparseList)>::Serialize(
-                x.sparseList, ar);
+            Serialization<Archive, decltype(x.sparseListBuffer)>::Serialize(
+                x.sparseListBuffer, ar);
             Serialization<Archive, decltype(x.tmpSet)>::Serialize(x.tmpSet, ar);
             break;
         case RegisterFormat::DENSE:
@@ -205,9 +234,9 @@ struct Serialization<Archive, Registers<p>,
             std::move(Serialization<Archive, RegisterFormat>::Deserialize(ar));
         switch (out.format) {
         case RegisterFormat::SPARSE:
-            out.sparseList = std::move(
-                Serialization<Archive, decltype(out.sparseList)>::Deserialize(
-                    ar));
+            out.sparseListBuffer = std::move(
+                Serialization<Archive,
+                              decltype(out.sparseListBuffer)>::Deserialize(ar));
             out.tmpSet = std::move(
                 Serialization<Archive, decltype(out.tmpSet)>::Deserialize(ar));
             break;
@@ -271,18 +300,21 @@ static Registers<p> combineRegisters(Registers<p> &registers1,
     }
     assert(registers1.format == registers2.format);
     switch (registers1.format) {
-    case RegisterFormat::SPARSE:
-        registers1.tmpSet.insert(registers1.tmpSet.end(),
-                                 registers2.sparseList.begin(),
-                                 registers2.sparseList.end());
+    case RegisterFormat::SPARSE: {
+        std::vector<uint32_t> sparseList2 =
+            decodeSparseList(registers2.sparseListBuffer);
+        registers1.tmpSet.insert(registers1.tmpSet.end(), sparseList2.begin(),
+                                 sparseList2.end());
         registers1.tmpSet.insert(registers1.tmpSet.end(),
                                  registers2.tmpSet.begin(),
                                  registers2.tmpSet.end());
         registers1.mergeSparse();
-        if (registers1.sparseList.size() > Registers<p>::MAX_SPARSELIST_SIZE) {
+        if (registers1.sparseListBuffer.size() >
+            Registers<p>::MAX_SPARSELIST_SIZE) {
             registers1.toDense();
         }
         break;
+    }
     case RegisterFormat::DENSE:
         const size_t m = 1 << p;
         assert(m == registers1.size());
