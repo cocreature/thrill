@@ -47,17 +47,20 @@ template <size_t sparsePrecision, size_t densePrecision>
 std::pair<size_t, uint8_t> decodeHash(SparseRegister reg) {
     static_assert(sparsePrecision >= densePrecision,
                   "densePrecision must not be greater than sparsePrecision");
-    uint32_t index = reg >> (32 - densePrecision);
-    // First zero bottom bits, then shift the bits used for the new index to the
-    // left
-    uint32_t topBitsValue =
-        (reg & upperNBitMask<sparsePrecision>) << densePrecision;
-    uint32_t sparseValue = (reg >> 1) & lowerNBitMask<6>;
     uint32_t denseValue;
-    if (topBitsValue == 0) {
+    uint32_t lowestBit = reg & 1;
+    uint32_t index;
+    if (lowestBit == 1) {
+        uint32_t sparseValue = (reg >> 1) & lowerNBitMask<31 - sparsePrecision>;
         denseValue = sparseValue + (sparsePrecision - densePrecision);
+        index = (reg >> (32 - densePrecision)) & lowerNBitMask<densePrecision>;
     } else {
+        // First zero bottom bits, then shift the bits used for the new index to the
+        // left
+        uint32_t topBitsValue =
+            (reg & upperNBitMask<sparsePrecision>) << densePrecision;
         denseValue = __builtin_clz(topBitsValue) + 1;
+        index = (reg >> (32 - densePrecision)) & lowerNBitMask<densePrecision>;
     }
     return {index, denseValue};
 }
@@ -69,20 +72,29 @@ std::pair<uint32_t, uint8_t> splitSparseRegister(SparseRegister reg) {
     return {idx, value};
 }
 
-template <size_t precision> uint32_t encodePair(uint32_t index, uint8_t value) {
-    return (index << (32 - precision)) | (value << 1);
+template <size_t sparsePrecision, size_t densePrecision> uint32_t encodePair(uint32_t index, uint8_t value) {
+    uint32_t decidingBits = lowerNBitMask<sparsePrecision - densePrecision> & index; // x_{63 - densePrecision}...x_{64 - sparsePrecision}
+    if (decidingBits == 0) {
+        return index << (32 - sparsePrecision) | (value << 1) | 1;
+    } else {
+        uint32_t shifted = index << (32 - sparsePrecision); // x_63...x_{64 - sparsePrecision} || 0
+        return shifted;
+    }
 }
 
-template <size_t precision> uint32_t encodeHash(uint64_t hash) {
-    static_assert(precision <= 32, "precision must be smaller than 32");
+template <size_t sparsePrecision, size_t densePrecision> uint32_t encodeHash(uint64_t hash) {
+    static_assert(sparsePrecision <= 32, "sparse precision must be smaller than 32");
+    static_assert(densePrecision < sparsePrecision, "dense precision must be smaller than sparse precision");
+
     // precision bits are used for the index, the rest is used as the value
-    uint64_t valueBits = hash << precision;
+    uint64_t valueBits = hash << sparsePrecision;
     static_assert(sizeof(long long) * CHAR_BIT == 64,
                   "64 bit long long are required for hyperloglog.");
     uint8_t leadingZeroes =
-        valueBits == 0 ? (64 - precision) : __builtin_clzll(valueBits);
+        valueBits == 0 ? (64 - sparsePrecision) : __builtin_clzll(valueBits);
+    uint32_t index = (hash >> (64 - sparsePrecision));
     auto encoded =
-        encodePair<precision>(hash >> (64 - precision), leadingZeroes + 1);
+        encodePair<sparsePrecision, densePrecision>(index, leadingZeroes + 1);
     return encoded;
 }
 
@@ -195,13 +207,15 @@ template <size_t p> struct Registers {
         entries.resize(1 << p, 0);
         for (auto val : DecodedSparseList(sparseListBuffer)) {
             auto decoded = decodeHash<25, p>(val);
-            entries[decoded.first] =
-                std::max(entries[decoded.first], decoded.second);
+            auto entry = entries[decoded.first];
+            auto value = std::max(entry, decoded.second);
+            entries[decoded.first] = value;
         }
         for (auto &val : tmpSet) {
             auto decoded = decodeHash<25, p>(val);
-            entries[decoded.first] =
-                std::max(entries[decoded.first], decoded.second);
+            auto entry = entries[decoded.first];
+            auto value = std::max(entry, decoded.second);
+            entries[decoded.first] = value;
         }
         sparseListBuffer.clear();
         tmpSet.clear();
@@ -215,7 +229,7 @@ template <size_t p> struct Registers {
                       "64 Bit long long are required for hyperloglog.");
         switch (format) {
         case RegisterFormat::SPARSE:
-            tmpSet.emplace_back(encodeHash<25>(hashVal));
+            tmpSet.emplace_back(encodeHash<25, p>(hashVal));
             if (tmpSet.size() > MAX_TMPSET_SIZE) {
                 mergeSparse();
             }
