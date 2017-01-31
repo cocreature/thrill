@@ -449,7 +449,6 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     double H = E_;
     if (V != 0) {
         // linear count
-        std::cout << "linear count\n";
         H = m * log(static_cast<double>(m) / V);
     }
 
