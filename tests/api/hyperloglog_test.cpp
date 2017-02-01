@@ -89,54 +89,6 @@ TEST(Operations, HyperLogLog) {
     thrill::Run([&](thrill::Context &ctx) { start_func(ctx); });
 }
 
-TEST(Operations, HyperLogLogMedian) {
-    std::function<void(Context &)> start_func = [](Context &ctx) {
-        const std::vector<size_t> sampleSizes = {10,    100,    1000,
-                                                 10000, 100000, 1000000};
-        const size_t iterationsPerSize = 100;
-
-        static std::uniform_int_distribution<size_t> distribution(
-            std::numeric_limits<size_t>::min(),
-            std::numeric_limits<size_t>::max());
-        static std::default_random_engine generator;
-        for (auto sampleSize : sampleSizes) {
-            std::vector<double> relativeErrors(iterationsPerSize);
-            for (size_t i = 0; i < iterationsPerSize; ++i) {
-                std::vector<size_t> data;
-                if (ctx.my_rank() == 0) {
-                    data.resize(sampleSize);
-                    std::generate(data.begin(), data.end(),
-                                  []() { return distribution(generator); });
-                }
-                size_t hyperloglogCount =
-                    Distribute<size_t>(ctx, data, 0).HyperLogLog<14>();
-                std::sort(data.begin(), data.end());
-                size_t uniqueCount =
-                    std::unique(data.begin(), data.end()) - data.begin();
-                relativeErrors[i] =
-                    relativeError(uniqueCount, hyperloglogCount);
-            }
-            std::sort(relativeErrors.begin(), relativeErrors.end());
-            if (ctx.my_rank() == 0) {
-                double q1 = relativeErrors[relativeErrors.size() * 0.1];
-                double q2 = relativeErrors[relativeErrors.size() * 0.5];
-                double q3 = relativeErrors[relativeErrors.size() * 0.9];
-                std::cout << "Relative error quantiles for sample size "
-                          << sampleSize << ":\n"
-                          << "10%: " << q1 << ", 50%: " << q2 << ", 90%: " << q3
-                          << "\n";
-            }
-        }
-
-    };
-
-    api::MemoryConfig mem_config;
-    mem_config.setup(4 * 1024 * 1024 * 1024llu);
-    mem_config.verbose_ = false;
-
-    api::RunLocalMock(mem_config, 1, 2, start_func);
-}
-
 TEST(Operations, encodeHash) {
     std::random_device rd;
     std::mt19937 gen(rd());

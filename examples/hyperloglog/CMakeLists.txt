@@ -1,0 +1,1 @@
+thrill_build_prog(error_evaluation)
