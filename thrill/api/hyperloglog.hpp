@@ -443,7 +443,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     double E_ = E;
     if (E <= 5 * m) {
         double bias = estimateBias<p>(E);
-        E = E - bias;
+        E_ = E - bias;
     }
 
     double H = E_;
