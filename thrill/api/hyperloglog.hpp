@@ -426,7 +426,11 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     auto reducedRegisters = node->result();
 
     if (reducedRegisters.format == RegisterFormat::SPARSE) {
-        reducedRegisters.toDense();
+        std::cout << "Sparse Format is used for the final output." << std::endl;
+        reducedRegisters.mergeSparse();
+        const size_t m = 1 << 25; // TODO: proper variable for precision used in sparse format
+        unsigned V = m - reducedRegisters.sparseListBuffer.size();
+        return m * log(static_cast<double>(m) / V);
     }
 
     const size_t m = 1 << p;
