@@ -211,6 +211,7 @@ template <size_t p> struct Registers {
             auto value = std::max(entry, decoded.second);
             entries[decoded.first] = value;
         }
+
         for (auto &val : tmpSet) {
             auto decoded = decodeHash<25, p>(val);
             auto entry = entries[decoded.first];
@@ -229,14 +230,20 @@ template <size_t p> struct Registers {
                       "64 Bit long long are required for hyperloglog.");
         switch (format) {
         case RegisterFormat::SPARSE:
-            tmpSet.emplace_back(encodeHash<25, p>(hashVal));
-            if (tmpSet.size() > MAX_TMPSET_SIZE) {
-                mergeSparse();
+            {
+                tmpSet.emplace_back(encodeHash<25, p>(hashVal));
+                if (tmpSet.size() > MAX_TMPSET_SIZE) {
+                    mergeSparse();
+                }
+                size_t sparseSize = tmpSet.size() * sizeof(SparseRegister)  + sparseListBuffer.size() * sizeof(uint8_t);
+                size_t denseSize = (1 << p) * sizeof(uint8_t);
+
+                if (sparseSize > denseSize) {
+                    std::cout << "Converting to dense" << std::endl;
+                    toDense();
+                }
+                break;
             }
-            if (sparseListBuffer.size() > MAX_SPARSELIST_SIZE) {
-                toDense();
-            }
-            break;
         case RegisterFormat::DENSE:
             uint64_t index = hashVal >> (64 - p);
             uint64_t val = hashVal << p;
@@ -428,7 +435,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     if (reducedRegisters.format == RegisterFormat::SPARSE) {
         std::cout << "Sparse Format is used for the final output." << std::endl;
         reducedRegisters.mergeSparse();
-        const size_t m = 1 << 25; // TODO: proper variable for precision used in sparse format
+        const size_t m = 1 << 25; // 25 is precision of sparse representation
         unsigned V = m - reducedRegisters.sparseListBuffer.size();
         return m * log(static_cast<double>(m) / V);
     }
