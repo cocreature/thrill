@@ -68,6 +68,7 @@ void evaluateDifferentPrecisions(api::MemoryConfig &mem_config,
     evaluate<7>(mem_config, sampleSizes, iterationsPerSize, outStream);
     evaluate<8>(mem_config, sampleSizes, iterationsPerSize, outStream);
     evaluate<9>(mem_config, sampleSizes, iterationsPerSize, outStream);
+    evaluate<10>(mem_config, sampleSizes, iterationsPerSize, outStream);
     evaluate<11>(mem_config, sampleSizes, iterationsPerSize, outStream);
     evaluate<12>(mem_config, sampleSizes, iterationsPerSize, outStream);
     evaluate<13>(mem_config, sampleSizes, iterationsPerSize, outStream);
