@@ -239,7 +239,6 @@ template <size_t p> struct Registers {
                 size_t denseSize = (1 << p) * sizeof(uint8_t);
 
                 if (sparseSize > denseSize) {
-                    std::cout << "Converting to dense" << std::endl;
                     toDense();
                 }
                 break;
