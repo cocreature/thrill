@@ -189,8 +189,6 @@ class DecodedSparseList {
 std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList);
 
 template <size_t p> struct Registers {
-    static const size_t MAX_SPARSELIST_SIZE = 200;
-    static const size_t MAX_TMPSET_SIZE = 40;
     RegisterFormat format;
     // Register values are always smaller than 64. We thus need log2(64) = 6
     // bits to store them. In particular an uint8_t is sufficient
