@@ -223,6 +223,19 @@ template <size_t p> struct Registers {
         sparseListBuffer.shrink_to_fit();
         tmpSet.shrink_to_fit();
     }
+    bool shouldConvertToDense() {
+        size_t tmpSize = tmpSet.size() * sizeof(SparseRegister);
+        size_t sparseSize = tmpSize  + sparseListBuffer.size() * sizeof(uint8_t);
+        size_t denseSize = (1 << p) * sizeof(uint8_t);
+        return sparseSize > denseSize;
+    }
+
+    bool shouldMerge() {
+        size_t tmpSize = tmpSet.size() * sizeof(SparseRegister);
+        size_t denseSize = (1 << p) * sizeof(uint8_t);
+        return tmpSize > (denseSize / 4);
+    }
+
     template <typename ValueType> void insert(const ValueType &value) {
         // first p bits are the index
         uint64_t hashVal = hash<ValueType>(value);
@@ -232,13 +245,12 @@ template <size_t p> struct Registers {
         case RegisterFormat::SPARSE:
             {
                 tmpSet.emplace_back(encodeHash<25, p>(hashVal));
-                if (tmpSet.size() > MAX_TMPSET_SIZE) {
+
+                if (shouldMerge()) {
                     mergeSparse();
                 }
-                size_t sparseSize = tmpSet.size() * sizeof(SparseRegister)  + sparseListBuffer.size() * sizeof(uint8_t);
-                size_t denseSize = (1 << p) * sizeof(uint8_t);
 
-                if (sparseSize > denseSize) {
+                if (shouldConvertToDense()) {
                     toDense();
                 }
                 break;
@@ -365,8 +377,7 @@ static Registers<p> combineRegisters(Registers<p> &registers1,
                                  registers2.tmpSet.begin(),
                                  registers2.tmpSet.end());
         registers1.mergeSparse();
-        if (registers1.sparseListBuffer.size() >
-            Registers<p>::MAX_SPARSELIST_SIZE) {
+        if (registers1.shouldConvertToDense()) {
             registers1.toDense();
         }
         break;
