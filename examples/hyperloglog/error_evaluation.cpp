@@ -37,7 +37,7 @@ void evaluate(api::MemoryConfig &mem_config,
                                   []() { return distribution(generator); });
                 }
                 double hyperloglogCount =
-                    Distribute<size_t>(ctx, data, 0).HyperLogLog<p>();
+                    Distribute<size_t>(ctx, data, 0).template HyperLogLog<p>();
                 if (ctx.my_rank() == 0) {
                     std::sort(data.begin(), data.end());
                     size_t uniqueCount =
