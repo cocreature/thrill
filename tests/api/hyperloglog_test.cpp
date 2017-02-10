@@ -90,21 +90,17 @@ TEST(Operations, HyperLogLog) {
 }
 
 TEST(Operations, encodeHash) {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<uint64_t> dis(0, 18446744073709551615u);
+    // decidingBits = 0 => 1 as last Bit, vale (aka number of leading zeroes) should be 5
+    uint64_t random =  0b0000100000000000000000000000100000000000000000000000000000000000;
+    uint32_t encoded = encodeHash<24, 16>(random);
+    uint32_t manualEncoded = 0b00001000000000000000000000001011;
+    ASSERT_EQ(manualEncoded, encoded);
 
-    for (int n = 0; n < 1000; ++n) {
-        uint64_t random = dis(gen);
-        uint32_t index = random >> (64 - 25);
-        uint64_t valueBits = random << 25;
-        uint8_t value = valueBits == 0 ? (64 - 25) : __builtin_clzll(valueBits);
-        value++;
-        uint32_t encoded = encodeHash<25>(random);
-        auto decoded = splitSparseRegister<25>(encoded);
-        ASSERT_EQ(index, decoded.first);
-        ASSERT_EQ(value, decoded.second);
-    }
+    // decidingBits = 1 => 0 as last Bit, dont care about value
+    random =  0b0000100000000000000010000000100000000000000000000000000000000000;
+    encoded = encodeHash<24, 16>(random);
+    manualEncoded = 0b00001000000000000000100000000000;
+    ASSERT_EQ(manualEncoded, encoded);
 }
 TEST(Operations, decodeHash) {
     std::random_device rd;
@@ -118,7 +114,7 @@ TEST(Operations, decodeHash) {
         uint8_t value =
             valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
         value++;
-        uint32_t encoded = encodeHash<25>(random);
+        uint32_t encoded = encodeHash<25, 4>(random);
         auto decoded = decodeHash<25, 4>(encoded);
         ASSERT_EQ(index, decoded.first);
         ASSERT_EQ(value, decoded.second);
@@ -131,7 +127,7 @@ TEST(Operations, decodeHash) {
         uint8_t value =
             valueBits == 0 ? (64 - densePrecision) : __builtin_clzll(valueBits);
         value++;
-        uint32_t encoded = encodeHash<25>(random);
+        uint32_t encoded = encodeHash<25, 12>(random);
         auto decoded = decodeHash<25, 12>(encoded);
         ASSERT_EQ(index, decoded.first);
         ASSERT_EQ(value, decoded.second);
