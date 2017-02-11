@@ -445,7 +445,6 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     auto reducedRegisters = node->result();
 
     if (reducedRegisters.format == RegisterFormat::SPARSE) {
-        std::cout << "Sparse Format is used for the final output." << std::endl;
         reducedRegisters.mergeSparse();
         const size_t m = 1 << 25; // 25 is precision of sparse representation
         unsigned sparseListCount = reducedRegisters.sparseSize;
@@ -481,7 +480,7 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
     double E_ = E;
     if (E <= 5 * m) {
         double bias = estimateBias<p>(E);
-        E_ = E - bias;
+        E_ -= bias;
     }
 
     double H = E_;
