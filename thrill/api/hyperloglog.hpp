@@ -189,6 +189,7 @@ class DecodedSparseList {
 std::vector<uint8_t> encodeSparseList(const std::vector<uint32_t> &sparseList);
 
 template <size_t p> struct Registers {
+    unsigned sparseSize = 0;
     RegisterFormat format;
     // Register values are always smaller than 64. We thus need log2(64) = 6
     // bits to store them. In particular an uint8_t is sufficient
@@ -242,6 +243,7 @@ template <size_t p> struct Registers {
         switch (format) {
         case RegisterFormat::SPARSE:
             {
+                sparseSize++;
                 tmpSet.emplace_back(encodeHash<25, p>(hashVal));
 
                 if (shouldMerge()) {
@@ -272,7 +274,9 @@ template <size_t p> struct Registers {
                    tmpSet.end(), std::back_inserter(resultVec));
         tmpSet.clear();
         tmpSet.shrink_to_fit();
-        sparseListBuffer = encodeSparseList(mergeSameIndices<25>(resultVec));
+        std::vector<SparseRegister> vec =  mergeSameIndices<25>(resultVec);
+        sparseSize = vec.size();
+        sparseListBuffer = encodeSparseList(vec);
     }
 };
 
@@ -444,7 +448,8 @@ double DIA<ValueType, Stack>::HyperLogLog() const {
         std::cout << "Sparse Format is used for the final output." << std::endl;
         reducedRegisters.mergeSparse();
         const size_t m = 1 << 25; // 25 is precision of sparse representation
-        unsigned V = m - reducedRegisters.sparseListBuffer.size();
+        unsigned sparseListCount = reducedRegisters.sparseSize;
+        unsigned V = m - sparseListCount;
         return m * log(static_cast<double>(m) / V);
     }
 
