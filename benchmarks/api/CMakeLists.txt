@@ -17,5 +17,6 @@ thrill_build_prog(read_write_lines)
 thrill_build_prog(sort)
 thrill_build_prog(string_test)
 thrill_build_prog(hyperloglog)
+thrill_build_prog(hyperloglogcores)
 
 ################################################################################
