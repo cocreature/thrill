@@ -47,14 +47,13 @@ int main() {
     const size_t iterations = 50;
     std::ofstream outStream;
     outStream.open("hyperloglog_benchmark");
-    outStream << "size,time,cores\n";
-    unsigned concurentThreadsSupported = std::thread::hardware_concurrency();
-    std::cout << "Using up to " << concurentThreadsSupported << std::endl;
-    concurrentThreadsSupported /= 2; // 2 workers, configured: workers per host
+    outStream << "size,time,coresPerHost\n";
+    unsigned concurentThreadsSupported = std::thread::hardware_concurrency() / 2; // 2 workers
+    std::cout << "Using up to " << 2 * concurentThreadsSupported << std::endl;
     size_t sampleSize = 100000;
     for (size_t coreCount = 1; coreCount <= concurentThreadsSupported; coreCount++) {
         std::cout << "Using " << 2 * coreCount << " cores" << std::endl;
-        std::string envVariable = "THRILL_WORKERS_PER_HOST=" + std::to_string(2 * coreCount);
+        std::string envVariable = "THRILL_WORKERS_PER_HOST=" + std::to_string(coreCount);
         char* convertedEnvVariable = new char[envVariable.length() + 1];
         strcpy(convertedEnvVariable, envVariable.c_str());
         putenv(convertedEnvVariable);
