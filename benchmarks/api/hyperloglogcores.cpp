@@ -46,10 +46,15 @@ int main() {
     };
     const size_t iterations = 50;
     std::ofstream outStream;
+    std::string hosts = "THRILL_LOCAL=1";
+    char* convertedHosts = new char[hosts.length() + 1];
+    strcpy(convertedHosts, hosts.c_str());
+    putenv(convertedHosts);
+
     outStream.open("hyperloglog_benchmark");
     outStream << "size,time,coresPerHost\n";
-    unsigned concurentThreadsSupported = std::thread::hardware_concurrency() / 2; // 2 workers
-    std::cout << "Using up to " << 2 * concurentThreadsSupported << std::endl;
+    unsigned concurentThreadsSupported = std::thread::hardware_concurrency();
+    std::cout << "Using up to " << concurentThreadsSupported << std::endl;
     size_t sampleSize = 1000000;
     for (size_t coreCount = 1; coreCount <= concurentThreadsSupported; coreCount++) {
         std::cout << "Using " << 2 * coreCount << " cores" << std::endl;
