@@ -50,7 +50,7 @@ int main() {
     outStream << "size,time,coresPerHost\n";
     unsigned concurentThreadsSupported = std::thread::hardware_concurrency() / 2; // 2 workers
     std::cout << "Using up to " << 2 * concurentThreadsSupported << std::endl;
-    size_t sampleSize = 100000;
+    size_t sampleSize = 1000000;
     for (size_t coreCount = 1; coreCount <= concurentThreadsSupported; coreCount++) {
         std::cout << "Using " << 2 * coreCount << " cores" << std::endl;
         std::string envVariable = "THRILL_WORKERS_PER_HOST=" + std::to_string(coreCount);
