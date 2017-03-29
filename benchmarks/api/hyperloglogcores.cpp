@@ -50,11 +50,11 @@ int main() {
     outStream << "size,time,cores\n";
     unsigned concurentThreadsSupported = std::thread::hardware_concurrency();
     std::cout << "Using up to " << concurentThreadsSupported << std::endl;
-
+    concurrentThreadsSupported /= 2; // 2 workers, configured: workers per host
     size_t sampleSize = 100000;
     for (size_t coreCount = 1; coreCount <= concurentThreadsSupported; coreCount++) {
-        std::cout << "Using " << coreCount << " cores" << std::endl;
-        std::string envVariable = "THRILL_WORKERS_PER_HOST=" + std::to_string(coreCount);
+        std::cout << "Using " << 2 * coreCount << " cores" << std::endl;
+        std::string envVariable = "THRILL_WORKERS_PER_HOST=" + std::to_string(2 * coreCount);
         char* convertedEnvVariable = new char[envVariable.length() + 1];
         strcpy(convertedEnvVariable, envVariable.c_str());
         putenv(convertedEnvVariable);
