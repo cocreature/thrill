@@ -615,8 +615,10 @@ public:
     Future<ValueType> MaxFuture(
         const ValueType& initial_value = ValueType()) const;
 
-    /* TODO docs
+    /*! Compute the approximate number of distinct elements in the DIA.
+     *
      * \param p Number of bits to use for index. Should be between 4 and 16.
+     * \ingroup dia_actions
      */
     template <size_t p> double HyperLogLog() const;
 
